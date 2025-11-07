@@ -13,8 +13,6 @@ pool:
 
 variables:
   buildConfiguration: 'Release'
-  MYSQL_ROOT_PASSWORD: $(MYSQL_ROOT_PASSWORD)
-  DB_DATABASE: $(DB_DATABASE)
 
 stages:
   # ========================================
@@ -27,6 +25,7 @@ stages:
         displayName: "Build e Testes Automáticos"
         steps:
           - checkout: self
+            displayName: '📦 Checkout do repositório'
 
           # 1️⃣ Instalar SDK do .NET 9
           - task: UseDotNet@2
@@ -35,31 +34,48 @@ stages:
               version: '9.0.x'
             displayName: '🔧 Instalar .NET 9 SDK'
 
-          # 2️⃣ Restaurar dependências
+          # 2️⃣ Instalar Docker
+          - task: DockerInstaller@0
+            displayName: '🐳 Instalar Docker'
+
+          # 3️⃣ Restaurar dependências
           - script: |
               echo "📦 Restaurando dependências..."
               dotnet restore MotoMonitoramento.sln
             displayName: '📦 Restaurar dependências'
 
-          # 3️⃣ Compilar aplicação
+          # 4️⃣ Compilar aplicação
           - script: |
               echo "🏗️ Compilando aplicação..."
               dotnet build MotoMonitoramento.sln --configuration $(buildConfiguration) --no-restore
             displayName: '⚙️ Compilar aplicação'
 
-          # 4️⃣ Executar testes unitários e de integração
+          # 5️⃣ Executar testes unitários e integração
           - script: |
-              echo "🧪 Executando testes..."
-              dotnet test --configuration $(buildConfiguration) --no-build --logger trx --results-directory $(Build.ArtifactStagingDirectory)/TestResults
-            displayName: '🧪 Executar testes automatizados'
+              echo "🧪 Executando testes automatizados..."
+              dotnet test tests/MotoMonitoramento.Tests.Unit/MotoMonitoramento.Tests.Unit.csproj --no-build --logger trx --results-directory $(Build.ArtifactStagingDirectory)/TestResults
+              dotnet test tests/MotoMonitoramento.Tests.Integration/MotoMonitoramento.Tests.Integration.csproj --no-build --logger trx --results-directory $(Build.ArtifactStagingDirectory)/TestResults
+            displayName: '🧪 Testes Unitários e Integração'
 
-          # 5️⃣ Publicar artefatos (para a próxima stage)
+          # 6️⃣ Publicar artefatos (para CD)
           - task: PublishBuildArtifacts@1
             inputs:
               PathtoPublish: '$(Build.ArtifactStagingDirectory)'
               ArtifactName: 'drop'
               publishLocation: 'Container'
             displayName: '📦 Publicar artefatos'
+
+          # 7️⃣ Build e push Docker (API + MySQL)
+          - task: AzureCLI@2
+            inputs:
+              azureSubscription: 'qmove-azure-connection'
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                echo "🚀 Build e push das imagens para o ACR..."
+                chmod +x ./build.sh
+                ./build.sh
+            displayName: '🐳 Build e push Docker'
 
   # ========================================
   # ☁️ CD - Deploy automático no Azure
@@ -73,15 +89,16 @@ stages:
         displayName: "🚀 Executar Deploy no Azure"
         steps:
           - checkout: self
+            displayName: '📦 Checkout do repositório'
 
-          # 1️⃣ Executar script de deploy
+          # Executar deploy via script
           - task: AzureCLI@2
             inputs:
-              azureSubscription: 'qmove-azure-connection'  # 🔧 nome da sua Service Connection
+              azureSubscription: 'qmove-azure-connection'
               scriptType: 'bash'
               scriptLocation: 'inlineScript'
               inlineScript: |
-                echo "🚀 Iniciando deploy no Azure..."
+                echo "☁️ Executando deploy no Azure..."
                 chmod +x ./deploy.sh
                 ./deploy.sh
-            displayName: '🚀 Deploy via Azure CLI'
+            displayName: '☁️ Deploy via Azure CLI'
