@@ -50,14 +50,35 @@ stages:
               dotnet build MotoMonitoramento.sln --configuration $(buildConfiguration) --no-restore
             displayName: '⚙️ Compilar aplicação'
 
-          # 5️⃣ Executar testes unitários e integração
+          # 5️⃣ Criar diretório de resultados de testes
           - script: |
-              echo "🧪 Executando testes automatizados..."
-              dotnet test tests/MotoMonitoramento.Tests.Unit/MotoMonitoramento.Tests.Unit.csproj --no-build --logger trx --results-directory $(Build.ArtifactStagingDirectory)/TestResults
-              dotnet test tests/MotoMonitoramento.Tests.Integration/MotoMonitoramento.Tests.Integration.csproj --no-build --logger trx --results-directory $(Build.ArtifactStagingDirectory)/TestResults
-            displayName: '🧪 Testes Unitários e Integração'
+              mkdir -p $(Build.ArtifactStagingDirectory)/TestResults
+            displayName: '📂 Criar pasta de resultados de testes'
 
-          # 6️⃣ Publicar artefatos (para CD)
+          # 6️⃣ Executar testes unitários e integração
+          - script: |
+              echo "🧪 Executando testes Unitários..."
+              dotnet test tests/MotoMonitoramento.Tests.Unit/MotoMonitoramento.Tests.Unit.csproj \
+                --no-build \
+                --logger trx \
+                --results-directory $(Build.ArtifactStagingDirectory)/TestResults
+
+              echo "🧪 Executando testes de Integração..."
+              dotnet test tests/MotoMonitoramento.Tests.Integration/MotoMonitoramento.Tests.Integration.csproj \
+                --no-build \
+                --logger trx \
+                --results-directory $(Build.ArtifactStagingDirectory)/TestResults
+            displayName: '🧪 Executar testes automatizados'
+
+          # 7️⃣ Publicar resultados de testes
+          - task: PublishTestResults@2
+            inputs:
+              testResultsFormat: 'VSTest'
+              testResultsFiles: '$(Build.ArtifactStagingDirectory)/TestResults/*.trx'
+              failTaskOnFailedTests: true
+            displayName: '📊 Publicar resultados dos testes'
+
+          # 8️⃣ Publicar artefatos (para a próxima stage)
           - task: PublishBuildArtifacts@1
             inputs:
               PathtoPublish: '$(Build.ArtifactStagingDirectory)'
@@ -65,14 +86,14 @@ stages:
               publishLocation: 'Container'
             displayName: '📦 Publicar artefatos'
 
-          # 7️⃣ Build e push Docker (API + MySQL)
+          # 9️⃣ Build e push Docker (API + MySQL)
           - task: AzureCLI@2
             inputs:
               azureSubscription: 'qmove-azure-connection'
               scriptType: 'bash'
               scriptLocation: 'inlineScript'
               inlineScript: |
-                echo "🚀 Build e push das imagens para o ACR..."
+                echo "🚀 Build e push das imagens Docker para o ACR..."
                 chmod +x ./build.sh
                 ./build.sh
             displayName: '🐳 Build e push Docker'
