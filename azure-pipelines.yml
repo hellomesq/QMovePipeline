@@ -1,90 +1,87 @@
 # ============================================
-# 🚀 PIPELINE DE CI/CD - PROJETO MOTO MONITORAMENTO
+# 🚀 PIPELINE COMPLETA - MOTO MONITORAMENTO (CI + CD)
 # ============================================
 
 trigger:
   branches:
     include:
       - main
+      - master
 
 pool:
-  vmImage: 'windows-latest'
+  vmImage: 'ubuntu-latest'
 
 variables:
   buildConfiguration: 'Release'
+  MYSQL_ROOT_PASSWORD: $(MYSQL_ROOT_PASSWORD)
+  DB_DATABASE: $(DB_DATABASE)
 
-# =============================
-# 🧱 ETAPA 1: RESTAURAR E COMPILAR
-# =============================
-steps:
-- task: UseDotNet@2
-  displayName: '🔧 Configurar versão do .NET SDK'
-  inputs:
-    packageType: 'sdk'
-    version: '9.0.x'
+stages:
+  # ========================================
+  # 🧱 CI - Build + Testes + Artefatos
+  # ========================================
+  - stage: CI
+    displayName: "Integração Contínua (Build + Testes)"
+    jobs:
+      - job: BuildAndTest
+        displayName: "Build e Testes Automáticos"
+        steps:
+          - checkout: self
 
-- script: |
-    echo "🔍 Restaurando dependências..."
-    dotnet restore MotoMonitoramento.sln
-  displayName: '📦 Restaurar pacotes NuGet'
+          # 1️⃣ Instalar SDK do .NET 9
+          - task: UseDotNet@2
+            inputs:
+              packageType: 'sdk'
+              version: '9.0.x'
+            displayName: '🔧 Instalar .NET 9 SDK'
 
-- script: |
-    echo "🏗️ Compilando solução..."
-    dotnet build MotoMonitoramento.sln --configuration $(buildConfiguration) --no-restore
-  displayName: '⚙️ Compilar projeto'
+          # 2️⃣ Restaurar dependências
+          - script: |
+              echo "📦 Restaurando dependências..."
+              dotnet restore MotoMonitoramento.sln
+            displayName: '📦 Restaurar dependências'
 
-# ==============================
-# 🧪 TESTES AUTOMATIZADOS
-# ==============================
-- script: |
-    echo "🚀 Executando testes Unitários..."
-    dotnet test tests/MotoMonitoramento.Tests.Unit/MotoMonitoramento.Tests.Unit.csproj --no-build --verbosity normal --logger trx
-  displayName: '🧪 Testes Unitários'
-  continueOnError: false
+          # 3️⃣ Compilar aplicação
+          - script: |
+              echo "🏗️ Compilando aplicação..."
+              dotnet build MotoMonitoramento.sln --configuration $(buildConfiguration) --no-restore
+            displayName: '⚙️ Compilar aplicação'
 
-- script: |
-    echo "🚀 Executando testes de Integração..."
-    dotnet test tests/MotoMonitoramento.Tests.Integration/MotoMonitoramento.Tests.Integration.csproj --no-build --verbosity normal --logger trx
-  displayName: '🔬 Testes de Integração'
-  continueOnError: false
+          # 4️⃣ Executar testes unitários e de integração
+          - script: |
+              echo "🧪 Executando testes..."
+              dotnet test --configuration $(buildConfiguration) --no-build --logger trx --results-directory $(Build.ArtifactStagingDirectory)/TestResults
+            displayName: '🧪 Executar testes automatizados'
 
-# =============================
-# 📊 ETAPA 3: PUBLICAR RESULTADOS DOS TESTES
-# =============================
-- task: PublishTestResults@2
-  inputs:
-    testResultsFormat: 'VSTest'
-    testResultsFiles: '**/*.trx'
-    failTaskOnFailedTests: true
-  displayName: '📊 Publicar resultados dos testes'
+          # 5️⃣ Publicar artefatos (para a próxima stage)
+          - task: PublishBuildArtifacts@1
+            inputs:
+              PathtoPublish: '$(Build.ArtifactStagingDirectory)'
+              ArtifactName: 'drop'
+              publishLocation: 'Container'
+            displayName: '📦 Publicar artefatos'
 
-# =============================
-# 📦 ETAPA 4: PUBLICAR ARTEFATOS
-# =============================
-- task: PublishBuildArtifacts@1
-  inputs:
-    PathtoPublish: '$(Build.ArtifactStagingDirectory)'
-    ArtifactName: 'drop'
-    publishLocation: 'Container'
-  displayName: '📦 Publicar artefatos de build'
+  # ========================================
+  # ☁️ CD - Deploy automático no Azure
+  # ========================================
+  - stage: CD
+    displayName: "Entrega Contínua (Deploy no Azure)"
+    dependsOn: CI
+    condition: succeeded()
+    jobs:
+      - job: Deploy
+        displayName: "🚀 Executar Deploy no Azure"
+        steps:
+          - checkout: self
 
-# =============================
-# ☁️ ETAPA 5: DEPLOY NO AZURE
-# =============================
-- task: AzureCLI@2
-  displayName: '🧱 Criar grupo de recursos e App Service (se não existir)'
-  inputs:
-    azureSubscription: 'qmove-azure-connection'  
-    scriptType: 'bash'
-    scriptLocation: 'inlineScript'
-    inlineScript: |
-      az group create --name qmove-rg --location brazilsouth
-      az appservice plan create --name qmove-plan --resource-group qmove-rg --sku B1 --is-linux
-      az webapp create --name qmove-api --resource-group qmove-rg --plan qmove-plan --runtime "DOTNET|9.0"
-
-- task: AzureWebApp@1
-  displayName: '🚀 Fazer deploy no Azure Web App'
-  inputs:
-    azureSubscription: 'qmove-azure-connection'   
-    appName: 'qmove-api'                   
-    package: '$(System.DefaultWorkingDirectory)/**/*.zip'
+          # 1️⃣ Executar script de deploy
+          - task: AzureCLI@2
+            inputs:
+              azureSubscription: 'qmove-azure-connection'  # 🔧 nome da sua Service Connection
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                echo "🚀 Iniciando deploy no Azure..."
+                chmod +x ./deploy.sh
+                ./deploy.sh
+            displayName: '🚀 Deploy via Azure CLI'
