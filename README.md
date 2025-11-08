@@ -1,7 +1,7 @@
 
 # QMOVE 
 
-Este projeto utiliza Azure Container Registry (ACR) e Azure Container Instance (ACI) para armazenar e executar a aplicação, além de um container MySQL em nuvem para o banco de dados.
+Este projeto utiliza Azure Container Registry (ACR) e Azure Container Instance (ACI) para armazenar e executar a aplicação, além de um container MySQL em nuvem para o banco de dados. A pipeline implementada garante Integração Contínua (CI) e Entrega Contínua (CD) com execução de testes, publicação de artefatos e deploy automático.
 
 ## Integrantes
 
