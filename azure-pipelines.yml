@@ -36,53 +36,63 @@ stages:
           - task: DockerInstaller@0
             displayName: "🐳 Instalar Docker"
 
+          # Restaurar dependências
           - script: |
               echo "📦 Restaurando dependências..."
               dotnet restore MotoMonitoramento.sln
             displayName: "📦 Restaurar dependências"
 
+          # Compilar aplicação
           - script: |
               echo "🏗️ Compilando aplicação..."
               dotnet build MotoMonitoramento.sln --configuration $(buildConfiguration) --no-restore
             displayName: "⚙️ Compilar aplicação"
 
+          # Criar pastas de teste
           - script: |
-              mkdir -p $(Build.ArtifactStagingDirectory)/TestResults
-              mkdir -p $(Build.ArtifactStagingDirectory)/App
-            displayName: "📂 Preparar diretórios para artefatos e testes"
+              mkdir -p tests/MotoMonitoramento.Tests.Unit/TestResults
+              mkdir -p tests/MotoMonitoramento.Tests.Integration/TestResults
+            displayName: "📂 Preparar diretórios de testes"
 
+          # Executar testes unitários
           - script: |
               echo "🧪 Executando testes Unitários..."
               dotnet test tests/MotoMonitoramento.Tests.Unit/MotoMonitoramento.Tests.Unit.csproj \
                 --no-build \
-                --logger "trx;LogFileName=$(Build.ArtifactStagingDirectory)/TestResults/UnitTests.trx"
+                --logger "trx;LogFileName=tests/MotoMonitoramento.Tests.Unit/TestResults/UnitTests.trx"
+            displayName: "🧪 Testes Unitários"
 
+          # Executar testes de integração
+          - script: |
               echo "🧪 Executando testes de Integração..."
               dotnet test tests/MotoMonitoramento.Tests.Integration/MotoMonitoramento.Tests.Integration.csproj \
                 --no-build \
-                --logger "trx;LogFileName=$(Build.ArtifactStagingDirectory)/TestResults/IntegrationTests.trx"
-            displayName: "🧪 Executar testes Unitários e Integração"
+                --logger "trx;LogFileName=tests/MotoMonitoramento.Tests.Integration/TestResults/IntegrationTests.trx"
+            displayName: "🧪 Testes de Integração"
 
-                    
-            # Verificar se os arquivos TRX foram realmente criados (debug)
+          # Verificar arquivos TRX (debug)
           - script: |
-              echo "🔍 Conteúdo de TestResults:"
-              ls -la $(Build.ArtifactStagingDirectory)/TestResults
-            displayName: "🔍 Verificar arquivos de teste"
+              echo "🔍 Conteúdo dos TestResults Unitário:"
+              ls -la tests/MotoMonitoramento.Tests.Unit/TestResults
+              echo "🔍 Conteúdo dos TestResults Integração:"
+              ls -la tests/MotoMonitoramento.Tests.Integration/TestResults
+            displayName: "🔍 Verificar arquivos TRX"
 
           # Publicar resultados de teste
           - task: PublishTestResults@2
             inputs:
               testResultsFormat: "VSTest"
-              testResultsFiles: "$(Build.ArtifactStagingDirectory)/TestResults/*.trx"
+              testResultsFiles: "tests/**/*.trx"
               failTaskOnFailedTests: true
             displayName: "📊 Publicar resultados dos testes"
 
+          # Publicar aplicação para ArtifactStagingDirectory
           - script: |
               echo "📂 Publicando aplicação para ArtifactStagingDirectory..."
               dotnet publish MotoMonitoramento.sln -c $(buildConfiguration) -o $(Build.ArtifactStagingDirectory)/App
             displayName: "📂 dotnet publish para artifact"
 
+          # Publicar artefatos
           - task: PublishBuildArtifacts@1
             inputs:
               PathtoPublish: "$(Build.ArtifactStagingDirectory)"
@@ -90,6 +100,7 @@ stages:
               publishLocation: "Container"
             displayName: "📦 Publicar artefatos"
 
+          # Build e push Docker
           - task: AzureCLI@2
             inputs:
               azureSubscription: "qmove-azure-connection"
