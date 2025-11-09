@@ -24,6 +24,16 @@ Em resumo, a aplicação transforma o processo manual de controle da frota em um
 
 ---
 
+## Descrição dos componentes 
+
+| Componente | Tipo | Descrição | Tecnologia |
+|-------------|------|------------|-------------|
+| **Pipeline YAML (CI/CD)** | Orquestrador CI/CD | Executa build, testes e deploy automático no Azure. | Azure DevOps / YAML / .NET 9 |
+| **MotoMonitoramento.API** | Serviço Backend | Exposição de endpoints REST da aplicação. | .NET 9 / C# |
+| **MySQL Container** | Banco de Dados | Armazena dados de usuários e motos. | MySQL / Docker |
+| **Testes Unitários** | Testes Automatizados | Valida regras de negócio e integração entre módulos. | xUnit / .NET |
+| **build.sh / deploy.sh** | Scripts de Automação | Constrói imagens Docker e faz deploy no Azure. | Bash / Docker / Azure CLI |
+
 ## Como executar 
 
 #### Clone o projeto
