@@ -1,122 +1,87 @@
-# ============================================
-# 🚀 PIPELINE COMPLETA - MOTO MONITORAMENTO (CI + CD)
-# ============================================
+# ========================================
+# 🧱 CI - Build + Testes + Artefatos
+# ========================================
+- stage: CI
+  displayName: "Integração Contínua (Build + Testes)"
+  jobs:
+    - job: BuildAndTest
+      displayName: "Build e Testes Automáticos"
+      steps:
+        - checkout: self
+          displayName: "📦 Checkout do repositório"
 
-trigger:
-  branches:
-    include:
-      - main
-      - master
+        # Instalar .NET 9 SDK
+        - task: UseDotNet@2
+          inputs:
+            packageType: "sdk"
+            version: "9.0.x"
+          displayName: "🔧 Instalar .NET 9 SDK"
 
-pool:
-  vmImage: 'ubuntu-latest'
+        # Instalar Docker
+        - task: DockerInstaller@0
+          displayName: "🐳 Instalar Docker"
 
-variables:
-  buildConfiguration: 'Release'
+        # Restaurar dependências
+        - script: |
+            echo "📦 Restaurando dependências..."
+            dotnet restore MotoMonitoramento.sln
+          displayName: "📦 Restaurar dependências"
 
-stages:
-  # ========================================
-  # 🧱 CI - Build + Testes + Artefatos
-  # ========================================
-  - stage: CI
-    displayName: "Integração Contínua (Build + Testes)"
-    jobs:
-      - job: BuildAndTest
-        displayName: "Build e Testes Automáticos"
-        steps:
-          - checkout: self
-            displayName: '📦 Checkout do repositório'
+        # Compilar aplicação
+        - script: |
+            echo "🏗️ Compilando aplicação..."
+            dotnet build MotoMonitoramento.sln --configuration $(buildConfiguration) --no-restore
+          displayName: "⚙️ Compilar aplicação"
 
-          # 1️⃣ Instalar SDK do .NET 9
-          - task: UseDotNet@2
-            inputs:
-              packageType: 'sdk'
-              version: '9.0.x'
-            displayName: '🔧 Instalar .NET 9 SDK'
+        # Criar pastas para artefatos e resultados de teste
+        - script: |
+            mkdir -p $(Build.ArtifactStagingDirectory)/TestResults
+            mkdir -p $(Build.ArtifactStagingDirectory)/App
+          displayName: "📂 Preparar diretórios para artefatos e testes"
 
-          # 2️⃣ Instalar Docker
-          - task: DockerInstaller@0
-            displayName: '🐳 Instalar Docker'
+        # Executar testes Unitários e de Integração
+        - script: |
+            echo "🧪 Executando testes Unitários..."
+            dotnet test tests/MotoMonitoramento.Tests.Unit/MotoMonitoramento.Tests.Unit.csproj \
+              --no-build \
+              --logger "trx;LogFileName=$(Build.ArtifactStagingDirectory)/TestResults/UnitTests.trx"
 
-          # 3️⃣ Restaurar dependências
-          - script: |
-              echo "📦 Restaurando dependências..."
-              dotnet restore MotoMonitoramento.sln
-            displayName: '📦 Restaurar dependências'
+            echo "🧪 Executando testes de Integração..."
+            dotnet test tests/MotoMonitoramento.Tests.Integration/MotoMonitoramento.Tests.Integration.csproj \
+              --no-build \
+              --logger "trx;LogFileName=$(Build.ArtifactStagingDirectory)/TestResults/IntegrationTests.trx"
+          displayName: "🧪 Executar testes Unitários e Integração"
 
-          # 4️⃣ Compilar aplicação
-          - script: |
-              echo "🏗️ Compilando aplicação..."
-              dotnet build MotoMonitoramento.sln --configuration $(buildConfiguration) --no-restore
-            displayName: '⚙️ Compilar aplicação'
+        # Publicar resultados de teste
+        - task: PublishTestResults@2
+          inputs:
+            testResultsFormat: "VSTest"
+            testResultsFiles: "**/TestResults/*.trx"
+            failTaskOnFailedTests: true
+          displayName: "📊 Publicar resultados dos testes"
 
-          # 5️⃣ Criar pasta para resultados de teste
-          - script: mkdir -p $(Build.ArtifactStagingDirectory)/TestResults
-            displayName: '📂 Criar pasta de resultados de testes'
+        # Copiar arquivos de build para artifact staging
+        - script: |
+            echo "📂 Copiando build para ArtifactStagingDirectory..."
+            cp -r **/bin/$(buildConfiguration)/net9.0/* $(Build.ArtifactStagingDirectory)/App/
+          displayName: "📂 Copiar build para artifact"
 
-          # 6️⃣ Executar testes unitários e integração
-          - script: |
-              echo "🧪 Executando testes Unitários..."
-              dotnet test tests/MotoMonitoramento.Tests.Unit/MotoMonitoramento.Tests.Unit.csproj \
-                --no-build \
-                --logger "trx;LogFileName=$(Build.ArtifactStagingDirectory)/TestResults/UnitTests.trx"
+        # Publicar artefatos
+        - task: PublishBuildArtifacts@1
+          inputs:
+            PathtoPublish: "$(Build.ArtifactStagingDirectory)"
+            ArtifactName: "drop"
+            publishLocation: "Container"
+          displayName: "📦 Publicar artefatos"
 
-              echo "🧪 Executando testes de Integração..."
-              dotnet test tests/MotoMonitoramento.Tests.Integration/MotoMonitoramento.Tests.Integration.csproj \
-                --no-build \
-                --logger "trx;LogFileName=$(Build.ArtifactStagingDirectory)/TestResults/IntegrationTests.trx"
-            displayName: '🧪 Executar testes Unitários e Integração'
-
-          # 7️⃣ Publicar resultados dos testes
-          - task: PublishTestResults@2
-            inputs:
-              testResultsFormat: 'VSTest'
-              testResultsFiles: '$(Build.ArtifactStagingDirectory)/TestResults/*.trx'
-              failTaskOnFailedTests: true
-            displayName: '📊 Publicar resultados dos testes'
-
-          # 8️⃣ Publicar artefatos para CD
-          - task: PublishBuildArtifacts@1
-            inputs:
-              PathtoPublish: '$(Build.ArtifactStagingDirectory)'
-              ArtifactName: 'drop'
-              publishLocation: 'Container'
-            displayName: '📦 Publicar artefatos'
-
-          # 9️⃣ Build e push Docker (API + MySQL)
-          - task: AzureCLI@2
-            inputs:
-              azureSubscription: 'qmove-azure-connection'
-              scriptType: 'bash'
-              scriptLocation: 'inlineScript'
-              inlineScript: |
-                echo "🐳 Build e push das imagens para o ACR..."
-                chmod +x ./build.sh
-                ./build.sh
-            displayName: '🐳 Build e push Docker'
-
-  # ========================================
-  # ☁️ CD - Deploy automático no Azure
-  # ========================================
-  - stage: CD
-    displayName: "Entrega Contínua (Deploy no Azure)"
-    dependsOn: CI
-    condition: succeeded()
-    jobs:
-      - job: Deploy
-        displayName: "🚀 Executar Deploy no Azure"
-        steps:
-          - checkout: self
-            displayName: '📦 Checkout do repositório'
-
-          # Executar deploy via script
-          - task: AzureCLI@2
-            inputs:
-              azureSubscription: 'qmove-azure-connection'
-              scriptType: 'bash'
-              scriptLocation: 'inlineScript'
-              inlineScript: |
-                echo "☁️ Executando deploy no Azure..."
-                chmod +x ./deploy.sh
-                ./deploy.sh
-            displayName: '☁️ Deploy via Azure CLI'
+        # Build e push Docker
+        - task: AzureCLI@2
+          inputs:
+            azureSubscription: "qmove-azure-connection"
+            scriptType: "bash"
+            scriptLocation: "inlineScript"
+            inlineScript: |
+              echo "🐳 Build e push das imagens para o ACR..."
+              chmod +x ./build.sh
+              ./build.sh
+          displayName: "🐳 Build e push Docker"
