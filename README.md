@@ -71,6 +71,3 @@ senha: root123
 ```bash
 http://aci-qmove-api.eastus.azurecontainer.io:8080/swagger/index.html 
 ```
-
-
-teste
